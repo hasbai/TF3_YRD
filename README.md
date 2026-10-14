@@ -1,62 +1,59 @@
-# TF3_YRD
+# 长三角 1950 · 南京—舟山
 
-《狂热运输 3》长三角 1950 地图生成代码。地图素材包从 [GitHub Releases](https://github.com/hasbai/TF3_YRD/releases) 下载，在原生地图编辑器导入。
+《狂热运输 3》地图导入包，适用于 Windows 版原生地图编辑器。以 1950 年的小城开局，逐步连接长三角的农场、工厂和港口。
 
-当前 v0.3.0 范围约 380 × 380 km，中心 120.45°E、31.17°N，地理内容顺时针旋转 10°，南京—舟山接近左上—右下对角线。覆盖南京、上海、杭州、宁波、舟山主岛、朱家尖及附近海域。输出最大实验档 Gigantomaniac 方图，游戏尺寸 28.672 × 28.672 km，7169² 的 16 位高度图。17 座城市从预计约 19—64 人起步；33 个产业点组成农业、林业、建材、纺织、煤铁、机械及水运链。
+**[下载 v0.3.0 地图包](https://github.com/hasbai/TF3_YRD/releases/download/v0.3.0/TF3_YRD_v0.3.0.zip)** · [版本说明与校验文件](https://github.com/hasbai/TF3_YRD/releases/tag/v0.3.0)
 
-![地图离线预览](docs/preview.png)
+## 地图里有什么
 
-## 制作过程
+- 17 座城市、33 个产业点。每城预计约 19—64 人起步，适合先跑短途货运，再建设干线。
+- 覆盖南京、上海、杭州、宁波和舟山，保留舟山主岛、朱家尖及邻近海域。
+- 长江、太湖、运河与沿海水域可用于规划水运。舟山（定海）作为海岛城市开局。
+- 农业、林业、建材、纺织、煤铁和机械加工链均有布局。
 
-1. 从 Mapzen Terrain Tiles 下载 zoom 12 真实高程，拼接并投影到同一局部坐标系。
-2. 将约 380 km 现实区域水平压缩约 13.25 倍，统一旋转高程、海岸和布局，高地按约 10% 缩放。
-3. 按 Natural Earth 海岸、天然湖泊和长江数据雕刻水面，补绘简化支流、运河和连接航道。
-4. 按高地、平原、水岸和建设预留区生成植被蒙版，平整城市和产业位置。
-5. 输出 PNG 和原生 `towns_industries` Lua，检查陆水位置、点位间距、货物链及航道连通；最终 PNG 的独立海域检查覆盖长江口、上海外海、杭州湾和舟山三侧海域，保留至少 16 m 岸边余量，再打包 ZIP。
+![长三角地形与城市预览](docs/preview.png)
 
-没有运行 Windows 版 TPF3 Map Studio。参考了它的公开源码和作者游戏测试记录，核对人口规模因子、产业资源路径和温带生态蒙版格式。来源固定到具体提交，见 [制作方法与来源](docs/methodology.md)。
+现实范围约 380 × 380 km，压缩到游戏内 28.672 × 28.672 km。地理内容顺时针旋转 10°，南京至舟山沿图中左上至右下展开。
 
-地图是 **1950 年小城开局的现代地理改编**。植被为设计分布，支流为简化补绘；不是 1950 年测绘复原。游戏内树木、产业建筑、船舶寻路和经济尚未验收。
+## 怎么开始
 
-## 生成地图
+1. 下载上方 ZIP 并完整解压。无需安装 Python、地图生成 MOD 或 TPF3 Map Studio。
+2. 打开解压目录 `YRD_1950` 中的 `使用说明.md`。
+3. 按说明开启实验地图尺寸，在编辑器中依次导入地形、生态蒙版、城市与产业。
+4. 检查城际道路，保存地图，再从该地图开始游戏。
 
-Python 3.11 及以上。预览图需要中文字体：Windows 自动查找微软雅黑，macOS 查找黑体，Linux 查找 Noto Sans CJK；也可通过 `--font` 指定字体文件。
+导入时使用以下设置：
 
-```sh
-python -m venv .venv
-# Windows: .venv\Scripts\activate
-# macOS/Linux: source .venv/bin/activate
-python -m pip install -r requirements.txt
-python scripts/download_data.py
-python scripts/build_map.py
-python tests/check_geometry.py
-python tests/check_package.py
-python scripts/package.py
-```
+| 项目 | 设置 |
+| --- | --- |
+| 气候 | 温带 / Temperate |
+| 地图大小 | Gigantomaniac，需开启实验地图尺寸 |
+| 比例 | 1:1 |
+| 高度图 | 7169 × 7169，16 位灰度 PNG |
+| 最低 / 最高高度 | **−20 m / 240 m** |
+| 水位 | **0 m** |
+| 开局年份 | **1950** |
 
-当前范围需要 2862 张高程瓦片。v0.2.0 已缓存的 1806 张全部复用，仅新增 1056 张；三份 Natural Earth 文件也复用。下载脚本显示复用与补下载数量。下载中断后可重跑，已有文件不会重复下载。原始数据放在 `cache/`，地图输出到 `build/YRD_1950/`，版本 ZIP 和校验值位于 `build/`。
+这是编辑器导入素材包，需自行导入并保存为地图。包内没有预建车站、铁路、港口和车辆。
 
-三个脚本均支持 `--config`、`--cache`、`--output`；构建还支持 `--font`。从空的输出目录执行会自动创建全部文件，不依赖本机游戏或上一次构建。`tests/check_package.py` 额外检查实际 PNG 样本和 Lua；Lua 语法校验在安装了 `lua` 的环境执行。
+## 开局可以做什么
 
-相同配置、数据、依赖和字体可重建同一内容；跨平台字体不同可能使预览图不同。下载清单保存源文件 SHA256，Release 也附地图包 SHA256。
+| 玩法 | 线路 |
+| --- | --- |
+| 短途公路 | 嘉兴农场 → 嘉兴，或南京农场 → 南京，供应蔬菜 |
+| 建材加工 | 宜兴黏土矿 → 宜兴砖厂 → 常州、镇江或南京 |
+| 水运 | 太湖渔场 → 湖州；舟山近海渔场 → 舟山（定海），供应鱼类 |
 
-## 调整地图
+小城开局客运量少，可先经营一至两条货运链。产业编号、需求和更多线路见包内 `使用说明.md` 及产业布局预览。
 
-仓库开发、数据复用、验收与发布约定见 [AGENTS.md](AGENTS.md)。
+## 地图依据与验证情况
 
-- [config/map.json](config/map.json)：中心、边长、顺时针旋转角、分辨率、高程缩放、年份和固定随机种子。
-- [data/layout.json](data/layout.json)：城市人口等级与需求、产业类型和原始地理位置。
-- [data/navigation.json](data/navigation.json)：简化支流和游戏连通航道。
-- [data/sea-navigation.json](data/sea-navigation.json)：独立海域连通检查点，不雕刻额外航道。
-- [scripts/](scripts/)：下载、构建和打包。
-- [docs/import-guide.md](docs/import-guide.md)：Windows 导入步骤；参数占位符由构建自动填入。
+地形基于现代高程和岸线，河道为游戏适度加宽，部分支流为简化补绘。人口、植被和产业按开局玩法设计；本图不是 1950 年测绘或企业分布的复原。
 
-改变中心、范围或布局后，先重跑下载，再生成、检查和打包。加工链的消费端必须同步调整。
+v0.3.0 已通过文件格式、点位、静态供需链及海域连通等离线检查。游戏内导入、船舶寻路和开局经济尚未实测。
 
-## 数据与许可
+## 修改地图与数据来源
 
-自有生成代码为 MIT。高程与地理数据分别遵循原数据许可和署名要求，不由代码许可替代。
+[生成和修改地图](docs/development.md) · [来源与制作口径模板](docs/methodology.md)
 
-Mapzen Terrain Tiles；Global GMTED2010 and SRTM terrain data courtesy of the U.S. Geological Survey；Global ETOPO1 terrain data courtesy of the U.S. National Oceanic and Atmospheric Administration。海岸、主要湖泊和长江数据：Made with Natural Earth（公共领域）。详细来源、修改方式和人口口径见 [docs/methodology.md](docs/methodology.md)。
-
-原始缓存和地图 ZIP 不放入 Git；地图文件通过 Release 分发。
+代码采用 [MIT 许可](LICENSE)。高程来自 Mapzen Terrain Tiles，海岸、主要湖泊和长江数据来自 Natural Earth。数据署名和许可见包内 `docs/来源与制作口径.md`。

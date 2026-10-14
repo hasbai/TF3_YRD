@@ -15,13 +15,15 @@
 
 本项目生成《狂热运输 3》长三角 1950 小城开局地图的原生编辑器导入包。
 
+- `README.md`：面向最终玩家，提供下载、导入概览和开局建议。删除套话，构建细节放入开发文档。
+- `docs/development.md`：本地生成、配置修改和文档分工。
 - `config/map.json`：版本、中心、旋转角、现实/游戏边长、网格、高程和种子。
 - `data/layout.json`：城市规模、需求、产业与地理位置。
 - `data/navigation.json`：简化支流与游戏连通航道。
 - `data/sea-navigation.json`：独立海域连通检查点，不用于雕刻航道。
 - `scripts/common.py`：路径、配置、地理与地图坐标正反变换。
 - `scripts/download_data.py`、`build_map.py`、`package.py`：缓存下载、构建、打包。
-- `docs/import-guide.md`、`methodology.md`：导入步骤和数据口径模板。
+- `docs/import-guide.md`、`docs/methodology.md`：导入步骤和数据口径模板。
 - `build/YRD_1950/`：生成的导入文件；`build/TF3_YRD_v*.zip`：发布包。
 
 ## 数据复用

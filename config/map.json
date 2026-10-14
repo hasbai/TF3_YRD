@@ -1,0 +1,18 @@
+{
+  "version": "0.2.0",
+  "title": "长三角1950 · 南京—宁波",
+  "center_lat": 31.05,
+  "center_lon": 120.15,
+  "real_side_m": 350000,
+  "game_side_m": 28672,
+  "resolution": 7169,
+  "dem_zoom": 12,
+  "working_resolution": 7169,
+  "height_min_m": -20,
+  "height_max_m": 240,
+  "water_level_m": 0,
+  "height_factor": 0.1,
+  "seed": 1950,
+  "start_year": 1950,
+  "natural_earth_revision": "ca96624a56bd078437bca8184e78163e5039ad19"
+}

@@ -13,7 +13,16 @@ from scipy.ndimage import (
     label,
 )
 
-from common import options, load_config, bounds, find_font, REPO
+from common import (
+    options,
+    load_config,
+    bounds,
+    corners,
+    geo_to_local,
+    local_to_geo,
+    find_font,
+    REPO,
+)
 import shutil
 
 ARGS = options(__doc__)
@@ -66,17 +75,16 @@ for t in layout["industries"]:
 
 
 def pixels(lon, lat):
+    x, y = geo_to_local(CFG, lon, lat)
     return (
-        (lon - WEST) / (EAST - WEST) * (N - 1),
-        (NORTH - lat) / (NORTH - SOUTH) * (N - 1),
+        (x / REAL_SIDE + 0.5) * (N - 1),
+        (0.5 - y / REAL_SIDE) * (N - 1),
     )
 
 
 def xy(lon, lat):
-    return (
-        (lon - CLON) * 111320 * math.cos(math.radians(CLAT)) / SCALE,
-        (lat - CLAT) * 111320 / SCALE,
-    )
+    x, y = geo_to_local(CFG, lon, lat)
+    return x / SCALE, y / SCALE
 
 
 def world_from_pixel(col, row):
@@ -100,19 +108,22 @@ def read_dem():
         mosaic[
             (y - y0) * 256 : (y - y0 + 1) * 256, (x - x0) * 256 : (x - x0 + 1) * 256
         ] = dem
-    lons = np.linspace(WEST, EAST, N)
-    lats = np.linspace(NORTH, SOUTH, N)
-    xs = (lons + 180) / 360 * 2**zoom * 256 - x0 * 256 - 0.5
-    ys = (
-        (1 - np.arcsinh(np.tan(np.radians(lats))) / np.pi) / 2 * 2**zoom * 256
-        - y0 * 256
-        - 0.5
-    )
+    local_x = np.linspace(-REAL_SIDE / 2, REAL_SIDE / 2, N)
+    local_y = np.linspace(REAL_SIDE / 2, -REAL_SIDE / 2, N)
     heights = np.empty((N, N), dtype=np.float32)
     for start in range(0, N, 128):
-        yy, xx = np.meshgrid(ys[start : start + 128], xs, indexing="ij")
+        yy, xx = np.meshgrid(local_y[start : start + 128], local_x, indexing="ij")
+        lons, lats = local_to_geo(CFG, xx, yy)
+        xs = (lons + 180) / 360 * 2**zoom * 256 - x0 * 256 - 0.5
+        ys = (
+            (1 - np.arcsinh(np.tan(np.radians(lats))) / np.pi) / 2 * 2**zoom * 256
+            - y0 * 256
+            - 0.5
+        )
+        assert xs.min() >= 0 and xs.max() < mosaic.shape[1] - 1
+        assert ys.min() >= 0 and ys.max() < mosaic.shape[0] - 1
         heights[start : start + 128] = map_coordinates(
-            mosaic, [yy, xx], order=1, mode="nearest"
+            mosaic, [ys, xs], order=1, mode="nearest"
         )
     return gaussian_filter(heights, 0.7)
 
@@ -229,8 +240,9 @@ def settle(item, height, water, placements, radius, margin):
         ),
         1,
     )
-    item["placed_lon"] = WEST + c / (N - 1) * (EAST - WEST)
-    item["placed_lat"] = NORTH - r / (N - 1) * (NORTH - SOUTH)
+    item["placed_lon"], item["placed_lat"] = local_to_geo(
+        CFG, item["x"] * SCALE, item["y"] * SCALE
+    )
     if not item.get("on_water", False):
         flat_radius = round(radius / pixel_m)
         blend_width = max(2, round(64 / pixel_m))
@@ -282,7 +294,7 @@ def biome_map(real_dem, water, placements):
 
 def export_lua():
     lines = [
-        "-- YRD 1950 / Gigantomaniac 1:1 / x East, y North, origin at centre",
+        f"-- YRD 1950 / Gigantomaniac 1:1 / map axes x right, y up; geography clockwise {CFG.get('rotation_deg', 0)} deg",
         "-- Estimated initial populations use Map Studio authors tests; game import unrun.",
         "function data()",
         "return {",
@@ -360,7 +372,7 @@ def preview(height, water, biomes, industrial=False):
     )
     draw.text(
         (80, 94),
-        f"Gigantomaniac 1:1  |  {GAME_SIDE / 1000:.3f} km × {GAME_SIDE / 1000:.3f} km  |  北向上  |  现实范围约 {REAL_SIDE / 1000:.0f} km × {REAL_SIDE / 1000:.0f} km",
+        f"Gigantomaniac 1:1  |  {GAME_SIDE / 1000:.3f} km × {GAME_SIDE / 1000:.3f} km  |  顺时针旋转 {CFG.get('rotation_deg', 0):g}°  |  现实范围约 {REAL_SIDE / 1000:.0f} km × {REAL_SIDE / 1000:.0f} km",
         font=font,
         fill="#485b5d",
     )
@@ -412,6 +424,7 @@ def preview(height, water, biomes, industrial=False):
         ("天目山", 119.43, 30.35),
         ("近海", 121.87, 30.83),
         ("石臼湖", 118.85, 31.54),
+        ("舟山群岛", 122.20, 30.25),
     ]:
         x, y = xy(lon, lat)
         draw.text(
@@ -422,7 +435,13 @@ def preview(height, water, biomes, industrial=False):
             stroke_width=2,
             stroke_fill="#dfe9e2",
         )
-    draw.text((1730, 168), "N ↑", font=title, fill="#203c3e")
+    angle = math.radians(CFG.get("rotation_deg", 0))
+    tip = (1700 + math.sin(angle) * 70, 265 - math.cos(angle) * 70)
+    draw.line([(1700, 265), tip], fill="#203c3e", width=4)
+    draw.regular_polygon(
+        (tip[0], tip[1], 9), 3, rotation=-CFG.get("rotation_deg", 0), fill="#203c3e"
+    )
+    draw.text((tip[0] - 12, tip[1] - 40), "N", font=title, fill="#203c3e")
     y = 1880
     draw.text(
         (80, y),
@@ -553,9 +572,9 @@ def validate(height, water, biomes, real_dem, lakes):
     navigation_samples = []
     for name, nominal_width, points in routes:
         for lon, lat in points[1:-1]:
-            if not (WEST < lon < EAST and SOUTH < lat < NORTH):
-                continue
             col, row = pixels(lon, lat)
+            if not (0 <= col <= N - 1 and 0 <= row <= N - 1):
+                continue
             r, c = round(row), round(col)
             component = int(channels[r, c])
             central_depth = -float(height[r, c])
@@ -580,6 +599,48 @@ def validate(height, water, biomes, real_dem, lakes):
             and int(channels[p["pixel_row"], p["pixel_col"]]) != ocean_component
         ):
             failures.append(p["name"] + ": not connected to main water network")
+    # Test the encoded import surface, with 16 m of bank clearance, on sea alone.
+    # Inland canals cannot hide a disconnected bay or island sea in this check.
+    sea_heights = np.asarray(Image.open(png), dtype=np.float32)
+    sea_heights *= (MAX_HEIGHT - MIN_HEIGHT) / 65535
+    sea_heights += MIN_HEIGHT
+    pixel_m = GAME_SIDE / (FINAL - 1)
+    final_sea = np.asarray(Image.open(OUT / "docs/参考蒙版/YRD_sea.png")) > 0
+    sea_radius = distance_transform_edt(final_sea & (sea_heights < WATER_LEVEL))
+    sea_channels, _ = label(sea_radius * pixel_m >= 16)
+    sea_samples = []
+    sea_component = None
+    for name, lon, lat in json.loads(
+        (REPO / "data/sea-navigation.json").read_text(encoding="utf-8")
+    ):
+        col, row = pixels(lon, lat)
+        if not (0 <= col <= N - 1 and 0 <= row <= N - 1):
+            failures.append(name + ": sea checkpoint outside map")
+            continue
+        r, c = round(row * (FINAL - 1) / (N - 1)), round(col * (FINAL - 1) / (N - 1))
+        component = int(sea_channels[r, c])
+        if sea_component is None:
+            sea_component = component
+        sea_samples.append(
+            dict(
+                name=name,
+                lon=lon,
+                lat=lat,
+                component=component,
+                depth_m=-float(sea_heights[r, c]),
+                sea_clearance_m=float(sea_radius[r, c]) * pixel_m,
+            )
+        )
+        if component == 0 or component != sea_component:
+            failures.append(
+                name + ": sea disconnected or less than 16 m bank clearance"
+            )
+    for p in industries:
+        if p["on_water"] and sea[p["pixel_row"], p["pixel_col"]]:
+            r = round(p["pixel_row"] * (FINAL - 1) / (N - 1))
+            c = round(p["pixel_col"] * (FINAL - 1) / (N - 1))
+            if int(sea_channels[r, c]) != sea_component:
+                failures.append(p["name"] + ": disconnected sea industry")
     report = dict(
         status="offline checks passed" if not failures else "failed",
         failed_checks=failures,
@@ -588,6 +649,8 @@ def validate(height, water, biomes, real_dem, lakes):
         industries=len(industries),
         game_extent_m=[GAME_SIDE, GAME_SIDE],
         real_extent_m=[REAL_SIDE, REAL_SIDE],
+        rotation_deg=CFG.get("rotation_deg", 0),
+        map_corners_lon_lat=corners(CFG),
         horizontal_compression=SCALE,
         height_range_m=[float(height.min()), float(height.max())],
         real_dem_height_range_m=[float(real_dem.min()), float(real_dem.max())],
@@ -611,6 +674,12 @@ def validate(height, water, biomes, real_dem, lakes):
         surface_navigation_connectivity="main water component and submerged channel samples asserted; ship pathfinding untested",
         navigation_samples=navigation_samples,
         ocean_component=ocean_component,
+        sea_connectivity=dict(
+            surface="decoded final PNG, sea-only mask",
+            minimum_bank_clearance_m=16,
+            status="passed" if not any("sea" in f for f in failures) else "failed",
+            samples=sea_samples,
+        ),
         on_water_industries=[
             dict(
                 id=p["id"],
@@ -680,6 +749,7 @@ for name, array in [
     ("biomes", biomes),
     ("mountains", (real_dem > 650).astype(np.uint8) * 255),
     ("rivers", rivers.astype(np.uint8) * 255),
+    ("sea", sea.astype(np.uint8) * 255),
 ]:
     folder = OUT / ("biomes" if name == "biomes" else "docs/参考蒙版")
     folder.mkdir(parents=True, exist_ok=True)
@@ -719,6 +789,8 @@ values = {
     "BBOX": f"东经 {WEST:.4f}°—{EAST:.4f}°、北纬 {SOUTH:.4f}°—{NORTH:.4f}°",
     "SOURCE_SPACING": f"{156543.033928 * math.cos(math.radians(CLAT)) / 2 ** CFG['dem_zoom']:.1f}",
     "REAL_GRID_SPACING": f"{REAL_SIDE / (FINAL - 1):.1f}",
+    "ROTATION": CFG.get("rotation_deg", 0),
+    "CORNERS": "；".join(f"{lon:.4f}°E, {lat:.4f}°N" for lon, lat in corners(CFG)),
 }
 for source, destination in [
     ("import-guide.md", "使用说明.md"),
@@ -744,6 +816,8 @@ manifest = dict(
     import_white_height_m=MAX_HEIGHT,
     water_level_m=WATER_LEVEL,
     reference_bbox_lon_lat=bounds(CFG),
+    rotation_deg=CFG.get("rotation_deg", 0),
+    map_corners_lon_lat=corners(CFG),
     real_side_m=REAL_SIDE,
     towns=len(towns),
     industries=len(industries),

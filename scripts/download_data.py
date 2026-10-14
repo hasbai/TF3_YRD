@@ -7,7 +7,7 @@ import math
 import time
 import urllib.request
 from PIL import Image
-from common import options, load_config, bounds
+from common import options, load_config, bounds, corners
 
 
 def tile(lon, lat, zoom):
@@ -52,7 +52,11 @@ def main():
         for x in range(math.floor(x0), math.floor(x1) + 1)
         for y in range(math.floor(y0), math.floor(y1) + 1)
     ]
-    print(f"DEM zoom {zoom}: {len(jobs)} tiles", flush=True)
+    reused = sum((out / f"{zoom}_{x}_{y}.png").is_file() for x, y in jobs)
+    print(
+        f"DEM zoom {zoom}: {len(jobs)} tiles; reuse {reused}, download {len(jobs) - reused}",
+        flush=True,
+    )
 
     def download(job):
         x, y = job
@@ -93,6 +97,9 @@ def main():
         "bbox": bbox,
         "center": [cfg["center_lat"], cfg["center_lon"]],
         "real_side_m": cfg["real_side_m"],
+        "rotation_deg": cfg.get("rotation_deg", 0),
+        "map_corners_lon_lat": corners(cfg),
+        "cache_reuse": {"tiles_reused": reused, "tiles_downloaded": len(jobs) - reused},
         "tiles": jobs,
         "sha256": dict(sorted(hashes.items())),
     }

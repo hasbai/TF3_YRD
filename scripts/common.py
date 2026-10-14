@@ -24,14 +24,44 @@ def load_config(path):
     return cfg
 
 
-def bounds(cfg):
-    dy = cfg["real_side_m"] / 111320 / 2
-    dx = dy / math.cos(math.radians(cfg["center_lat"]))
+def geo_to_local(cfg, lon, lat):
+    """Real metres in map axes; positive angle rotates geography clockwise."""
+    east = (
+        (lon - cfg["center_lon"]) * 111320 * math.cos(math.radians(cfg["center_lat"]))
+    )
+    north = (lat - cfg["center_lat"]) * 111320
+    angle = math.radians(cfg.get("rotation_deg", 0))
+    c, s = math.cos(angle), math.sin(angle)
+    return c * east + s * north, -s * east + c * north
+
+
+def local_to_geo(cfg, x, y):
+    """Inverse of geo_to_local; also accepts NumPy arrays for DEM sampling."""
+    angle = math.radians(cfg.get("rotation_deg", 0))
+    c, s = math.cos(angle), math.sin(angle)
+    east, north = c * x - s * y, s * x + c * y
+    return (
+        cfg["center_lon"] + east / (111320 * math.cos(math.radians(cfg["center_lat"]))),
+        cfg["center_lat"] + north / 111320,
+    )
+
+
+def corners(cfg):
+    half = cfg["real_side_m"] / 2
     return [
-        cfg["center_lon"] - dx,
-        cfg["center_lat"] - dy,
-        cfg["center_lon"] + dx,
-        cfg["center_lat"] + dy,
+        list(local_to_geo(cfg, x, y))
+        for x, y in [(-half, -half), (half, -half), (half, half), (-half, half)]
+    ]
+
+
+def bounds(cfg):
+    """Axis-aligned download envelope, not the rotated map footprint."""
+    points = corners(cfg)
+    return [
+        min(p[0] for p in points),
+        min(p[1] for p in points),
+        max(p[0] for p in points),
+        max(p[1] for p in points),
     ]
 
 

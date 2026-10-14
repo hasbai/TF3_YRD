@@ -3,7 +3,7 @@
 import hashlib
 import json
 import zipfile
-from common import options, load_config, bounds
+from common import options, load_config, bounds, corners
 
 
 def main():
@@ -17,6 +17,8 @@ def main():
     assert exported_config == cfg, "Exported map/config mismatch: rebuild first"
     assert manifest["version"] == cfg["version"]
     assert manifest["reference_bbox_lon_lat"] == bounds(cfg)
+    assert manifest["rotation_deg"] == cfg.get("rotation_deg", 0)
+    assert manifest["map_corners_lon_lat"] == corners(cfg)
     assert manifest["heightmap_pixels"] == [cfg["resolution"], cfg["resolution"]]
     assert manifest["game_size_m"] == [cfg["game_side_m"], cfg["game_side_m"]]
     report = json.loads((root / "docs/离线检查.json").read_text(encoding="utf-8"))

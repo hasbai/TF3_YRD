@@ -2,17 +2,17 @@
 
 《狂热运输 3》长三角 1950 地图生成代码。地图素材包从 [GitHub Releases](https://github.com/hasbai/TF3_YRD/releases) 下载，在原生地图编辑器导入。
 
-当前范围约 350 × 350 km，覆盖南京—上海—杭州—宁波及附近城市。输出最大实验档 Gigantomaniac 方图，游戏尺寸 28.672 × 28.672 km，7169² 的 16 位高度图。16 座城市从预计约 19—64 人起步；32 个产业点组成农业、林业、建材、纺织、煤铁、机械及水运链。
+当前 v0.3.0 范围约 380 × 380 km，中心 120.45°E、31.17°N，地理内容顺时针旋转 10°，南京—舟山接近左上—右下对角线。覆盖南京、上海、杭州、宁波、舟山主岛、朱家尖及附近海域。输出最大实验档 Gigantomaniac 方图，游戏尺寸 28.672 × 28.672 km，7169² 的 16 位高度图。17 座城市从预计约 19—64 人起步；33 个产业点组成农业、林业、建材、纺织、煤铁、机械及水运链。
 
 ![地图离线预览](docs/preview.png)
 
 ## 制作过程
 
 1. 从 Mapzen Terrain Tiles 下载 zoom 12 真实高程，拼接并投影到同一局部坐标系。
-2. 将约 350 km 现实区域水平压缩约 12.21 倍，高地按约 10% 缩放，为交通建设保留空间。
+2. 将约 380 km 现实区域水平压缩约 13.25 倍，统一旋转高程、海岸和布局，高地按约 10% 缩放。
 3. 按 Natural Earth 海岸、天然湖泊和长江数据雕刻水面，补绘简化支流、运河和连接航道。
 4. 按高地、平原、水岸和建设预留区生成植被蒙版，平整城市和产业位置。
-5. 输出 PNG 和原生 `towns_industries` Lua，检查陆水位置、点位间距、货物链及航道连通，再打包 ZIP。
+5. 输出 PNG 和原生 `towns_industries` Lua，检查陆水位置、点位间距、货物链及航道连通；最终 PNG 的独立海域检查覆盖长江口、上海外海、杭州湾和舟山三侧海域，保留至少 16 m 岸边余量，再打包 ZIP。
 
 没有运行 Windows 版 TPF3 Map Studio。参考了它的公开源码和作者游戏测试记录，核对人口规模因子、产业资源路径和温带生态蒙版格式。来源固定到具体提交，见 [制作方法与来源](docs/methodology.md)。
 
@@ -29,11 +29,12 @@ python -m venv .venv
 python -m pip install -r requirements.txt
 python scripts/download_data.py
 python scripts/build_map.py
+python tests/check_geometry.py
 python tests/check_package.py
 python scripts/package.py
 ```
 
-下载会缓存 1806 张高程瓦片，首次运行需要联网。下载中断后可重跑，已有文件不会重复下载。原始数据放在 `cache/`，地图输出到 `build/YRD_1950/`，版本 ZIP 和校验值位于 `build/`。
+当前范围需要 2862 张高程瓦片。v0.2.0 已缓存的 1806 张全部复用，仅新增 1056 张；三份 Natural Earth 文件也复用。下载脚本显示复用与补下载数量。下载中断后可重跑，已有文件不会重复下载。原始数据放在 `cache/`，地图输出到 `build/YRD_1950/`，版本 ZIP 和校验值位于 `build/`。
 
 三个脚本均支持 `--config`、`--cache`、`--output`；构建还支持 `--font`。从空的输出目录执行会自动创建全部文件，不依赖本机游戏或上一次构建。`tests/check_package.py` 额外检查实际 PNG 样本和 Lua；Lua 语法校验在安装了 `lua` 的环境执行。
 
@@ -41,9 +42,12 @@ python scripts/package.py
 
 ## 调整地图
 
-- [config/map.json](config/map.json)：中心、边长、分辨率、高程缩放、年份和固定随机种子。
+仓库开发、数据复用、验收与发布约定见 [AGENTS.md](AGENTS.md)。
+
+- [config/map.json](config/map.json)：中心、边长、顺时针旋转角、分辨率、高程缩放、年份和固定随机种子。
 - [data/layout.json](data/layout.json)：城市人口等级与需求、产业类型和原始地理位置。
 - [data/navigation.json](data/navigation.json)：简化支流和游戏连通航道。
+- [data/sea-navigation.json](data/sea-navigation.json)：独立海域连通检查点，不雕刻额外航道。
 - [scripts/](scripts/)：下载、构建和打包。
 - [docs/import-guide.md](docs/import-guide.md)：Windows 导入步骤；参数占位符由构建自动填入。
 

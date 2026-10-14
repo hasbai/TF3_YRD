@@ -2,17 +2,17 @@
 
 from pathlib import Path
 import json
-import math
 import shutil
 import struct
 import subprocess
 import sys
 import numpy as np
 from PIL import Image
+from scipy.ndimage import distance_transform_edt, label
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "scripts"))
-from common import options, load_config, bounds  # noqa: E402
+from common import options, load_config, bounds, corners, geo_to_local  # noqa: E402
 
 args = options(__doc__)
 cfg = load_config(args.config)
@@ -21,6 +21,8 @@ report = json.loads((root / "docs/离线检查.json").read_text(encoding="utf-8"
 assert report["status"] == "offline checks passed", report["failed_checks"]
 manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
 assert manifest["reference_bbox_lon_lat"] == bounds(cfg)
+assert manifest["rotation_deg"] == cfg.get("rotation_deg", 0)
+assert manifest["map_corners_lon_lat"] == corners(cfg)
 layout = json.loads((root / "docs/布局数据.json").read_text(encoding="utf-8"))
 assert (
     len(layout["towns"]) == manifest["towns"]
@@ -43,21 +45,41 @@ for point in layout["towns"] + layout["industries"]:
     assert (elevation < cfg["water_level_m"]) == wet, (point["name"], elevation)
     margin = 350 if wet else 500
     assert min(row, column, height - row - 1, width - column - 1) * 4 >= margin
-    x = (
-        (point["placed_lon"] - cfg["center_lon"])
-        * 111320
-        * math.cos(math.radians(cfg["center_lat"]))
-        / (cfg["real_side_m"] / cfg["game_side_m"])
-    )
-    y = (
-        (point["placed_lat"] - cfg["center_lat"])
-        * 111320
-        / (cfg["real_side_m"] / cfg["game_side_m"])
-    )
+    x, y = geo_to_local(cfg, point["placed_lon"], point["placed_lat"])
+    scale = cfg["real_side_m"] / cfg["game_side_m"]
+    x, y = x / scale, y / scale
     assert abs(x - point["x"]) < 0.001 and abs(y - point["y"]) < 0.001
 biome = Image.open(root / "biomes/YRD_biomes.png")
 assert biome.size == (width, height) and biome.mode == "L"
 assert set(np.unique(np.asarray(biome))).issubset({26, 77, 128})
+sea = np.asarray(Image.open(root / "docs/参考蒙版/YRD_sea.png")) > 0
+water_code = (
+    (cfg["water_level_m"] - cfg["height_min_m"])
+    / (cfg["height_max_m"] - cfg["height_min_m"])
+    * 65535
+)
+clearance = (
+    distance_transform_edt(sea & (array < water_code))
+    * cfg["game_side_m"]
+    / (width - 1)
+)
+components, _ = label(clearance >= 16)
+sea_component = None
+checkpoints = json.loads(
+    (REPO / "data/sea-navigation.json").read_text(encoding="utf-8")
+)
+for name, lon, lat in checkpoints:
+    x, y = geo_to_local(cfg, lon, lat)
+    column = round((x / cfg["real_side_m"] + 0.5) * (width - 1))
+    row = round((0.5 - y / cfg["real_side_m"]) * (height - 1))
+    assert 0 <= row < height and 0 <= column < width, name
+    component = int(components[row, column])
+    if sea_component is None:
+        sea_component = component
+    assert component > 0 and component == sea_component, (name, component)
+print(
+    f"Final PNG: {len(checkpoints)} sea checkpoints connected with 16 m bank clearance"
+)
 for path in root.rglob("*.md"):
     assert "{{" not in path.read_text(encoding="utf-8")
 for path in root.rglob("*.json"):

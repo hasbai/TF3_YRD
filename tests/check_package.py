@@ -100,6 +100,28 @@ if lua:
         ],
         check=True,
     )
+    names_fixture = args.cache / "check_names_fixture.lua"
+    names_fixture.write_text(
+        "return {\n"
+        + ",\n".join(
+            "{ name = "
+            + json.dumps(p["id"] + " " + p["name"], ensure_ascii=False)
+            + f', x = {p["x"]:.2f}, y = {p["y"]:.2f}, '
+            + f'fileName = "::/industries/{p["key"]}/{p["key"]}.con" }}'
+            for p in layout["industries"]
+        )
+        + "\n}",
+        encoding="utf-8",
+    )
+    subprocess.run(
+        [
+            lua,
+            str(REPO / "tests/check_industry_names.lua"),
+            str(root / "docs/恢复产业名称.txt"),
+            str(names_fixture),
+        ],
+        check=True,
+    )
 else:
     print("Lua executable unavailable: native syntax check not run")
 print(

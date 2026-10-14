@@ -39,6 +39,8 @@ python scripts/package.py
 
 如需检查 Lua 语法，先安装 `lua` 并确保命令可用。`tests/check_package.py` 在未找到 `lua` 时会跳过语法检查，并输出提示。
 
+该检查也会模拟执行包内的产业名称恢复命令，核对名称、重复执行、位置和类型不符、重复匹配及异步失败计数。命令由 `scripts/restore_names.lua` 模板和最终布局生成，游戏内执行另需验收。
+
 ## 配置与布局
 
 | 文件 | 修改内容 |

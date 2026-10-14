@@ -320,6 +320,20 @@ def export_lua():
     (OUT / "towns_industries/YRD_1950.lua").write_text(
         "\n".join(lines), encoding="utf-8"
     )
+    names = []
+    for p in industries:
+        name = json.dumps(p["id"] + " " + p["name"], ensure_ascii=False)
+        key = p["key"]
+        names.append(
+            f'{{ name = {name}, x = {p["x"]:.2f}, y = {p["y"]:.2f}, '
+            f'fileName = "::/industries/{key}/{key}.con" }}'
+        )
+    command = (REPO / "scripts/restore_names.lua").read_text(encoding="utf-8")
+    command = command.replace("{{INDUSTRIES}}", ", ".join(names))
+    (OUT / "docs/恢复产业名称.txt").write_text(
+        " ".join(line.strip() for line in command.splitlines()) + "\n",
+        encoding="utf-8",
+    )
 
 
 def csvs():

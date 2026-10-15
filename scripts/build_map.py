@@ -46,6 +46,8 @@ layout = json.loads((REPO / "data/layout.json").read_text(encoding="utf-8"))
 towns, industries = [], []
 for t in layout["towns"]:
     name, lon, lat, factor, com, ind, pop, year, basis = t
+    if factor is None:
+        factor = pop / CFG["reference_people_per_game_person"] / 98
     towns.append(
         dict(
             name=name,
@@ -57,6 +59,7 @@ for t in layout["towns"]:
             population_reference=pop,
             reference_year=year,
             population_basis=basis,
+            initial_people_estimated=round(factor * 98),
         )
     )
 for t in layout["industries"]:
@@ -144,12 +147,18 @@ def polygon(draw, rings, value):
 def line(draw, points, width_m):
     if len(points) < 2 or not intersects(points):
         return
+    vertices = [tuple(round(v) for v in pixels(*p)) for p in points]
+    width = max(2, round(width_m / (GAME_SIDE / (N - 1))))
     draw.line(
-        [pixels(p[0], p[1]) for p in points],
+        vertices,
         fill=255,
-        width=max(2, round(width_m / (GAME_SIDE / (N - 1)))),
+        width=width,
         joint="curve",
     )
+    # Round joins close the single-pixel holes Pillow can leave at sharp bends.
+    radius = (width - 1) / 2
+    for x, y in vertices:
+        draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=255)
 
 
 def water_masks():
@@ -169,34 +178,22 @@ def water_masks():
     for f in json.loads((CACHE / "ne_10m_lakes.geojson").read_text(encoding="utf-8"))[
         "features"
     ]:
-        if f["properties"]["featurecla"] != "Lake":
-            continue  # exclude modern reservoirs, including Qiandao
         g = f["geometry"]
         polys = [g["coordinates"]] if g["type"] == "Polygon" else g["coordinates"]
         for rings in polys:
             if intersects(rings[0]):
                 polygon(draw, rings, 255)
-                lakes.append(f["properties"].get("name") or "unnamed natural lake")
+                lakes.append(f["properties"].get("name") or "unnamed lake or reservoir")
     river_image = Image.new("L", (N, N), 0)
     draw = ImageDraw.Draw(river_image)
-    for f in json.loads(
-        (CACHE / "ne_10m_rivers_lake_centerlines.geojson").read_text(encoding="utf-8")
-    )["features"]:
-        name = f["properties"].get("name")
-        if name != "Yangtze":
-            continue
-        g = f["geometry"]
-        lines = [g["coordinates"]] if g["type"] == "LineString" else g["coordinates"]
-        for points in lines:
-            line(draw, points, 160)
-    # Georeferenced, simplified supplementary routes, not surveyed river banks.
-    routes = json.loads((REPO / "data/navigation.json").read_text(encoding="utf-8"))
-    for _, width, points in routes:
+    routes = []
+    waterways = json.loads((REPO / "data/waterways.geojson").read_text(encoding="utf-8"))
+    for feature in waterways["features"]:
+        props = feature["properties"]
+        points = feature["geometry"]["coordinates"]
+        width = props["width_game_m"]
+        routes.append([props["name"], width, points])
         line(draw, points, width)
-    # West Lake: small enough to retain as a simplified lake, not a large reservoir.
-    x, y = pixels(120.145, 30.242)
-    rx, ry = 8, 12
-    ImageDraw.Draw(lake_image).ellipse((x - rx, y - ry, x + rx, y + ry), fill=255)
     water = sea | (np.asarray(lake_image) > 0) | (np.asarray(river_image) > 0)
     return water, sea, np.asarray(river_image) > 0, lakes, routes
 
@@ -295,7 +292,7 @@ def biome_map(real_dem, water, placements):
 def export_lua():
     lines = [
         f"-- YRD 1950 / Gigantomaniac 1:1 / map axes x right, y up; geography clockwise {CFG.get('rotation_deg', 0)} deg",
-        "-- Estimated initial populations use Map Studio authors tests; game import unrun.",
+        f"-- Reference population scale: {CFG['reference_people_per_game_person']} people per estimated game resident; factors use the Map Studio estimate of 98 residents per unit.",
         "function data()",
         "return {",
         "  towns = {",
@@ -305,7 +302,7 @@ def export_lua():
             f"    -- {p['population_basis']}",
             "    { name = " + json.dumps(p["name"], ensure_ascii=False) + ",",
             f"      position = {{ x = {p['x']:.2f}, y = {p['y']:.2f} }},",
-            f"      sizeFactors = {{ 1.00, {p['factor']:.2f}, 1.00 }},",
+            f"      sizeFactors = {{ 1.00, {p['factor']:.5f}, 1.00 }},",
             f'      landUse2CargoNeedsCategories = {{ com = {{ {{ "{p["com"]}", 1.0 }} }}, ind = {{ {{ "{p["ind"]}", 0.5 }} }} }} }},',
         ]
     lines += ["  },", "  industries = {"]
@@ -322,7 +319,7 @@ def export_lua():
     )
     names = []
     for p in industries:
-        name = json.dumps(p["id"] + " " + p["name"], ensure_ascii=False)
+        name = json.dumps(p["name"], ensure_ascii=False)
         key = p["key"]
         names.append(
             f'{{ name = {name}, x = {p["x"]:.2f}, y = {p["y"]:.2f}, '
@@ -399,7 +396,9 @@ def preview(height, water, biomes, industrial=False):
         offset = (
             -25 if p["name"] in ["常州", "扬州", "无锡", "马鞍山矿区", "嘉兴"] else 8
         )
-        text = p["name"] if industrial else f"{p['name']} ≈{round(p['factor'] * 98)}人"
+        text = p["name"]
+        if not industrial and p["name"] in {"上海", "南京", "杭州"}:
+            text += f" ≈{p['initial_people_estimated']}人"
         draw.text(
             (x + 9, y + offset),
             text,
@@ -465,13 +464,13 @@ def preview(height, water, biomes, industrial=False):
     )
     draw.text(
         (80, y + 34),
-        "DEM: Mapzen Terrain Tiles  |  海岸/主要湖泊/长江: Natural Earth 10m  |  支流水系: 简化补绘",
+        "DEM: Mapzen Terrain Tiles  |  海岸/湖泊: Natural Earth  |  自然河流: OpenStreetMap contributors",
         font=small,
         fill="#485b5d",
     )
     draw.text(
         (80, y + 65),
-        "植被为地形驱动的设计分布；人数为预计值。本图为离线预览，尚未在游戏中导入验收。",
+        "植被为地形驱动的设计分布；人数为预计值。本图为离线预览，实际导入结果见包内游戏验收记录。",
         font=small,
         fill="#485b5d",
     )
@@ -585,7 +584,7 @@ def validate(height, water, biomes, real_dem, lakes):
         failures.append("Ocean reference point is not water")
     navigation_samples = []
     for name, nominal_width, points in routes:
-        for lon, lat in points[1:-1]:
+        for lon, lat in points:
             col, row = pixels(lon, lat)
             if not (0 <= col <= N - 1 and 0 <= row <= N - 1):
                 continue
@@ -603,16 +602,10 @@ def validate(height, water, biomes, real_dem, lakes):
                     water_radius_m=radius_m,
                 )
             )
-            if component != ocean_component or central_depth < 2:
-                failures.append(name + ": disconnected or dry navigation sample")
+            if central_depth < 2:
+                failures.append(name + ": dry navigation sample")
             if radius_m < 4:
                 failures.append(name + ": collapsed channel sample")
-    for p in industries:
-        if (
-            p["on_water"]
-            and int(channels[p["pixel_row"], p["pixel_col"]]) != ocean_component
-        ):
-            failures.append(p["name"] + ": not connected to main water network")
     # Test the encoded import surface, with 16 m of bank clearance, on sea alone.
     # Inland canals cannot hide a disconnected bay or island sea in this check.
     sea_heights = np.asarray(Image.open(png), dtype=np.float32)
@@ -672,12 +665,12 @@ def validate(height, water, biomes, real_dem, lakes):
         forest_biome_land_fraction=float(
             ((biomes == 77) & ~water).sum() / (~water).sum()
         ),
-        initial_people_estimated=sum(round(p["factor"] * 98) for p in towns),
+        initial_people_estimated=sum(p["initial_people_estimated"] for p in towns),
         city_factors_range=[
             min(p["factor"] for p in towns),
             max(p["factor"] for p in towns),
         ],
-        natural_lakes=lakes,
+        lakes_and_reservoirs=lakes,
         game_import_tested=False,
         all_industries_have_downstream_city_demand=not any(
             "downstream" in f for f in failures
@@ -685,7 +678,7 @@ def validate(height, water, biomes, real_dem, lakes):
         maximum_placement_shift_game_m=max(
             p["position_shift_m"] for p in towns + industries
         ),
-        surface_navigation_connectivity="main water component and submerged channel samples asserted; ship pathfinding untested",
+        surface_navigation_connectivity="river samples checked for depth; inland fisheries may occupy independent lakes; final PNG sea and offshore industries checked with 16 m bank clearance; ship pathfinding untested",
         navigation_samples=navigation_samples,
         ocean_component=ocean_component,
         sea_connectivity=dict(
@@ -709,7 +702,11 @@ def validate(height, water, biomes, real_dem, lakes):
     (OUT / "docs/离线检查.json").write_text(
         json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
     )
-    print(json.dumps(report, ensure_ascii=False, indent=2), flush=True)
+    print(
+        f"{report['status']}: {len(towns)} towns, {len(industries)} industries, "
+        f"{len(navigation_samples)} river samples; failures={failures}",
+        flush=True,
+    )
     if failures:
         raise RuntimeError("Validation failed")
 
@@ -725,6 +722,7 @@ for file in ["import-guide.md", "methodology.md"]:
         / ("使用说明.md" if file == "import-guide.md" else "docs/来源与制作口径.md"),
     )
 shutil.copyfile(ARGS.config, OUT / "docs/map-config.json")
+shutil.copyfile(REPO / "data/waterways.geojson", OUT / "docs/水系中心线.geojson")
 print("Read DEM", flush=True)
 real_dem = read_dem()
 print("Rasterize water", flush=True)
@@ -734,11 +732,14 @@ height = np.maximum(
     3.2, 3.2 + np.maximum(real_dem - 5, 0) * CFG["height_factor"]
 ).astype(np.float32)
 distance = distance_transform_edt(water)
+bank_blend = np.minimum(distance_transform_edt(~water) * (GAME_SIDE / (N - 1)) / 48, 1)
+height = 3.2 + (height - 3.2) * bank_blend.astype(np.float32)
 depth = np.minimum(12, 4 + distance * 1.25).astype(np.float32)
 height[water] = -depth[water]
 height = gaussian_filter(height, 0.65)
 height[water] = np.minimum(height[water], -2.5)
 height[~water] = np.maximum(height[~water], 1.8)
+assert height.max() < MAX_HEIGHT, "Terrain exceeds PNG encoding range"
 placements = []
 print("Place towns/industries", flush=True)
 for p in towns:
@@ -747,7 +748,11 @@ for p in industries:
     radius = (
         80
         if p["on_water"]
-        else (155 if p["key"] in ["farm", "cotton_farm", "livestock_farm"] else 100)
+        else (
+            300
+            if p["key"] == "forest"
+            else (155 if p["key"] in ["farm", "cotton_farm", "livestock_farm"] else 100)
+        )
     )
     settle(p, height, water, placements, radius, 350 if p["on_water"] else 500)
 print("Biomes and PNG", flush=True)
@@ -809,6 +814,7 @@ values = {
 for source, destination in [
     ("import-guide.md", "使用说明.md"),
     ("methodology.md", "docs/来源与制作口径.md"),
+    ("game-validation.md", "docs/游戏验收.md"),
 ]:
     body = (REPO / "docs" / source).read_text(encoding="utf-8")
     for key, value in values.items():
@@ -836,6 +842,7 @@ manifest = dict(
     towns=len(towns),
     industries=len(industries),
     requires_mods=False,
+    required_editor_settings={"nameList": CFG["nameList"], "language": CFG["language"]},
     game_import_tested=False,
     saved_game_map_included=False,
 )
@@ -844,8 +851,8 @@ manifest = dict(
 )
 lookup = {p["id"]: p for p in industries} | {p["name"]: p for p in towns}
 links = [
-    ("A04", "嘉兴"),
-    ("A07", "南京"),
+    ("A04", "杭州"),
+    ("A07", "句容"),
     ("B01", "B02"),
     ("L01", "L04"),
     ("W01", "湖州"),
@@ -856,8 +863,8 @@ links = [
     ("T02", "T03"),
     ("O01", "O02"),
     ("O02", "O03"),
-    ("F01", "宣城"),
-    ("F03", "宁波"),
+    ("F01", "杭州"),
+    ("F03", "富阳"),
 ]
 rows = []
 for a, b in links:

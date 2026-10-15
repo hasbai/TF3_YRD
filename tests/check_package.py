@@ -2,12 +2,11 @@
 
 from pathlib import Path
 import json
-import shutil
 import struct
-import subprocess
 import sys
 import numpy as np
 from PIL import Image
+from lupa.lua54 import LuaRuntime
 from scipy.ndimage import distance_transform_edt, label
 
 REPO = Path(__file__).resolve().parents[1]
@@ -23,12 +22,23 @@ manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
 assert manifest["reference_bbox_lon_lat"] == bounds(cfg)
 assert manifest["rotation_deg"] == cfg.get("rotation_deg", 0)
 assert manifest["map_corners_lon_lat"] == corners(cfg)
+assert manifest["required_editor_settings"] == {
+    "nameList": "::/names/china/china.names",
+    "language": "zh_CN",
+}
 layout = json.loads((root / "docs/布局数据.json").read_text(encoding="utf-8"))
 assert (
     len(layout["towns"]) == manifest["towns"]
     and len(layout["industries"]) == manifest["industries"]
 )
 png = root / "heightmaps/YRD_1950_7169.png"
+towns = {p["name"]: p for p in layout["towns"]}
+for town in towns.values():
+    if town["population_reference"] is not None:
+        expected = town["population_reference"] / cfg["reference_people_per_game_person"]
+        assert abs(town["factor"] * 98 - expected) < 0.001, town["name"]
+assert towns["上海"]["factor"] / towns["苏州"]["factor"] > 1.9
+assert all(towns["上海"]["factor"] >= p["factor"] for p in towns.values())
 with png.open("rb") as file:
     header = file.read(29)
 width, height, depth, color = struct.unpack(">IIBB", header[16:26])
@@ -84,46 +94,39 @@ for path in root.rglob("*.md"):
     assert "{{" not in path.read_text(encoding="utf-8")
 for path in root.rglob("*.json"):
     json.loads(path.read_text(encoding="utf-8"))
-lua = shutil.which("lua")
-if lua:
-    script = "dofile(arg[1]);local m=data();assert(#m.towns==tonumber(arg[2]));assert(#m.industries==tonumber(arg[3]));print('Native Lua syntax passed')"
-    checker = args.cache / "check_layout.lua"
-    checker.parent.mkdir(exist_ok=True, parents=True)
-    checker.write_text(script, encoding="utf-8")
-    subprocess.run(
-        [
-            lua,
-            str(checker),
-            str(root / "towns_industries/YRD_1950.lua"),
-            str(manifest["towns"]),
-            str(manifest["industries"]),
-        ],
-        check=True,
+lua = LuaRuntime()
+native = lua.execute(
+    (root / "towns_industries/YRD_1950.lua").read_text(encoding="utf-8")
+    + "\nreturn data()"
+)
+assert len(native["towns"]) == manifest["towns"]
+assert len(native["industries"]) == manifest["industries"]
+for index, expected in enumerate(layout["towns"], 1):
+    imported = native["towns"][index]
+    assert imported["name"] == expected["name"]
+    assert abs(imported["sizeFactors"][2] - expected["factor"]) <= 0.000005
+print("Native Lua syntax and town population factors passed")
+names_fixture = args.cache / "check_names_fixture.lua"
+names_fixture.write_text(
+    "return {\n"
+    + ",\n".join(
+        "{ name = "
+        + json.dumps(p["name"], ensure_ascii=False)
+        + f", x = {p['x']:.2f}, y = {p['y']:.2f}, "
+        + f'fileName = "::/industries/{p["key"]}/{p["key"]}.con" }}'
+        for p in layout["industries"]
     )
-    names_fixture = args.cache / "check_names_fixture.lua"
-    names_fixture.write_text(
-        "return {\n"
-        + ",\n".join(
-            "{ name = "
-            + json.dumps(p["id"] + " " + p["name"], ensure_ascii=False)
-            + f', x = {p["x"]:.2f}, y = {p["y"]:.2f}, '
-            + f'fileName = "::/industries/{p["key"]}/{p["key"]}.con" }}'
-            for p in layout["industries"]
-        )
-        + "\n}",
-        encoding="utf-8",
-    )
-    subprocess.run(
-        [
-            lua,
-            str(REPO / "tests/check_industry_names.lua"),
-            str(root / "docs/恢复产业名称.txt"),
-            str(names_fixture),
-        ],
-        check=True,
-    )
-else:
-    print("Lua executable unavailable: native syntax check not run")
+    + "\n}",
+    encoding="utf-8",
+)
+lua.globals().arg = lua.table_from(
+    [
+        (root / "docs/恢复产业名称.txt").as_posix(),
+        names_fixture.as_posix(),
+    ]
+)
+lua.globals().dofile = lambda path: lua.execute(Path(path).read_text(encoding="utf-8"))
+lua.execute((REPO / "tests/check_industry_names.lua").read_text(encoding="utf-8"))
 print(
     f"Exported PNG, coordinates, biomes, documents and {manifest['towns'] + manifest['industries']} placement samples passed"
 )

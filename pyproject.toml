@@ -1,0 +1,18 @@
+[project]
+name = "tf3-yrd"
+version = "0.4.0"
+description = "Build the Yangtze River Delta 1950 map import package"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "numpy==2.4.6",
+    "pillow==12.1.0",
+    "scipy==1.17.0",
+]
+
+[dependency-groups]
+dev = [
+    "lupa>=2.8",
+    "osmium>=4.3.1",
+    "ruff>=0.14",
+]

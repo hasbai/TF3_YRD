@@ -13,16 +13,16 @@
 
 ## 项目与入口
 
-本项目生成《狂热运输 3》长三角 1950 小城开局地图的原生编辑器导入包。
+本项目生成《狂热运输 3》长三角现代地理、1950 开局地图的原生编辑器导入包。
 
 - `README.md`：面向最终玩家，提供下载、导入概览和开局建议。删除套话，构建细节放入开发文档。
 - `docs/development.md`：本地生成、配置修改和文档分工。
 - `config/map.json`：版本、中心、旋转角、现实/游戏边长、网格、高程和种子。
 - `data/layout.json`：城市规模、需求、产业与地理位置。
-- `data/navigation.json`：简化支流与游戏连通航道。
+- `data/waterways.geojson`：由缓存 OSM 提取的自然河流中心线，不补画缺失河段。
 - `data/sea-navigation.json`：独立海域连通检查点，不用于雕刻航道。
 - `scripts/common.py`：路径、配置、地理与地图坐标正反变换。
-- `scripts/download_data.py`、`build_map.py`、`package.py`：缓存下载、构建、打包。
+- `scripts/download_data.py`、`extract_waterways.py`、`build_map.py`、`package.py`：缓存下载、水系提取、构建、打包。
 - `docs/import-guide.md`、`docs/methodology.md`：导入步骤和数据口径模板。
 - `build/YRD_1950/`：生成的导入文件；`build/TF3_YRD_v*.zip`：发布包。
 
@@ -39,7 +39,8 @@
 - 地形、水体、城市、产业、CSV 与 Lua 使用同一坐标变换。`rotation_deg` 为地理内容顺时针旋转角，北箭头同步旋转。
 - 实际地图是旋转方形；经纬度 bbox 只是下载包围盒。清单同时记录旋转角和四角，图内判断使用地图坐标。
 - 调整范围时保留用户指定城市和海岛，以及城市、产业的建设边距。海域要连续，不能靠穿陆开槽或内河绕行掩盖断海。
-- 人口、植被、产业的设计估计明确标注，不冒充 1950 年实测复原。保留数据来源、许可和口径。
+- 地形、城市与产业采用现代资料，保留 1950 开局；人口与产能的游戏缩尺明确标注。保留数据来源、许可和口径。
+- 新建地图使用 Chinese 名字集和简体中文显示语言，避免新生成英文名称。
 - 默认保持原生温带导入格式、1950 开局、统一水位和静态产业供需链；用户要求改变时同步更新配置与文档。
 
 ## 验证与预览
@@ -48,14 +49,15 @@
 
 ```sh
 # 仅当范围、zoom 或源数据需求改变时运行；已有数据会复用。
-python3 scripts/download_data.py
-python3 scripts/build_map.py
-python3 tests/check_geometry.py
-python3 tests/check_package.py
-python3 scripts/package.py
+uv run python scripts/download_data.py
+uv run python scripts/build_map.py
+uv run python tests/check_geometry.py
+uv run python tests/check_package.py
+uv run python scripts/package.py
 ```
 
-- 代码改动通过 `ruff check scripts tests` 和 `git diff --check`；依赖遵循 `requirements.txt`。
+- 使用 `uv sync --locked` 安装依赖。依赖以 `pyproject.toml`、`uv.lock` 为准，`requirements.txt` 保留运行依赖清单。
+- 代码改动通过 `uv run ruff check scripts tests` 和 `git diff --check`。
 - 验证最终 PNG 编码、陆水位置、点位边距、Lua 语法、产业供需与水系连通。
 - 海域连通必须检查最终 PNG 解码水面，并在独立海域蒙版中保留至少 16 游戏米岸边余量。
 - 查看实际地形与产业两张预览；用户提供参考图时逐项对照范围、朝向、海岛与水面关系。更新 `docs/preview.png`。

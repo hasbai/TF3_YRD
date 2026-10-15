@@ -1,5 +1,5 @@
 {
-  "version": "0.3.1",
+  "version": "0.4.0",
   "title": "长三角1950 · 南京—舟山",
   "center_lat": 31.17,
   "center_lon": 120.45,
@@ -10,10 +10,15 @@
   "dem_zoom": 12,
   "working_resolution": 7169,
   "height_min_m": -20,
-  "height_max_m": 240,
+  "height_max_m": 700,
   "water_level_m": 0,
-  "height_factor": 0.1,
+  "height_factor": 0.35,
   "seed": 1950,
   "start_year": 1950,
+  "reference_people_per_game_person": 80000,
+  "geography_basis": "present_day",
+  "nameList": "::/names/china/china.names",
+  "language": "zh_CN",
+  "waterway_regions": ["shanghai", "jiangsu", "zhejiang", "anhui"],
   "natural_earth_revision": "ca96624a56bd078437bca8184e78163e5039ad19"
 }

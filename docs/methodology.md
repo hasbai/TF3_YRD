@@ -1,6 +1,6 @@
 # 来源与制作口径
 
-制作日期：2026-10-14。
+制作日期：2026-10-15。
 
 ## 导入格式
 
@@ -14,7 +14,7 @@
 
 本包借鉴已记录的格式和测试结论，独立制作地理、地形和布局；没有运行 Studio 的 Windows 图形软件，也没有把作者实测冒称为本包在游戏中的验收。
 
-v0.3.1 另核对本机游戏的 `base/content/gui.zip` 中 `gui/map_editor/map_editor.tl` 与 API 类型声明：高度图导入按钮会调用地形替换命令并记录 `Replacing terrain`；生态应用读取现有高度图。产业导入只复制位置、旋转、是否水上、资源路径和标签，不读取名称。包内的一次性名称命令使用 `Industry.construction`、`Construction.transf:getTransl()` 与 `api.cmd.makeEntitySetNameCmd`，按最终位置和资源路径匹配后改名。API 存在和 Lua 模拟检查不等于游戏内命令验收。
+原生格式另核对本机游戏的 `base/content/gui.zip` 中 `gui/map_editor/map_editor.tl` 与 API 类型声明：高度图导入按钮会调用地形替换命令并记录 `Replacing terrain`；生态应用读取现有高度图。产业导入只复制位置、旋转、是否水上、资源路径和标签，不读取名称。包内的一次性名称命令使用 `Industry.construction`、`Construction.transf:getTransl()` 与 `api.cmd.makeEntitySetNameCmd`，按最终位置和资源路径匹配后改名。名称命令使用离线模拟检查；本版游戏验收状态见 `docs/游戏验收.md`。
 
 ## 高程
 
@@ -24,48 +24,56 @@ v0.3.1 另核对本机游戏的 `base/content/gui.zip` 中 `gui/map_editor/map_e
 
 源瓦片在本区地面分辨率约 {{SOURCE_SPACING}} m/px。本版直接使用 7169 px 制作网格；实际地图约 {{REAL_SIDE_KM}} km，对应实地网格约 {{REAL_GRID_SPACING}} m。输出为游戏 4 m 采样网格，其密度不代表实地 4 m 测绘精度。
 
-改动：轻微平滑；将陆地起伏缩至约 10%；保证低地高于统一水位；单独雕刻海底、河床、湖盆；平整城市与产业位置。PNG 的黑白编码范围为 −20—240 m，实际地形约 −12—{{MAX_TERRAIN}} m。
+改动：轻微平滑；将陆地起伏缩至约 35%，为旧版的 3.5 倍；河岸在 48 游戏米内过渡到统一水面；单独雕刻海底、河床、湖盆；平整城市与产业位置。PNG 黑白编码范围为 −20—700 m，实际地形约 −12—{{MAX_TERRAIN}} m。
 
-地形数据署名：Mapzen Terrain Tiles。Global GMTED2010 and SRTM terrain data courtesy of the U.S. Geological Survey；Global ETOPO1 terrain data courtesy of the U.S. National Oceanic and Atmospheric Administration。瓦片为多源融合，未逐像元鉴定底层来源。[Mapzen 数据署名说明](https://github.com/tilezen/joerd/blob/master/docs/attribution.md)。
+地形数据署名：Mapzen Terrain Tiles。Global GMTED2010 and SRTM terrain data courtesy of the U.S. Geological Survey.
+
+Global ETOPO1 terrain data courtesy of the U.S. National Oceanic and Atmospheric Administration.
+
+瓦片为多源融合，未逐像元鉴定底层来源。[Mapzen 数据署名说明](https://github.com/tilezen/joerd/blob/master/docs/attribution.md)。
 
 ## 海岸、湖泊、河流
 
-[Natural Earth 10m Physical Vectors](https://www.naturalearthdata.com/downloads/10m-physical-vectors/)，固定源提交 `ca96624a56bd078437bca8184e78163e5039ad19`，使用 `ne_10m_land`、`ne_10m_lakes`、`ne_10m_rivers_lake_centerlines`。其中“10m”表示 **1:1000 万制图比例尺**，不是 10 米精度。其数据为公共领域。[使用条款](https://www.naturalearthdata.com/about/terms-of-use/)。
+[Natural Earth 10m Physical Vectors](https://www.naturalearthdata.com/downloads/10m-physical-vectors/)，固定源提交 `ca96624a56bd078437bca8184e78163e5039ad19`，使用 `ne_10m_land`、`ne_10m_lakes`。旧版河流文件继续保留在缓存，本版河道改用 OSM。其中“10m”表示 **1:1000 万制图比例尺**，不是 10 米精度。其数据为公共领域。[使用条款](https://www.naturalearthdata.com/about/terms-of-use/)。
 
-天然湖泊保留；现代水库湖面排除。主要湖形与长江中心线来自上述地理数据，岸线和河道为现代概化数据。其余水系为地理定位的简化补绘。OpenStreetMap 查询未取得可用数据，成品不使用也不声称使用了 OSM 河岸或森林资料。
+湖泊和现代水库均保留，包括千岛湖；不再按 1950 年地貌排除水库。海岸和主要湖形来自 Natural Earth。
+
+河流中心线来自 [Geofabrik 中国分省 OSM 提取](https://download.geofabrik.de/asia/china.html)：上海、江苏、浙江、安徽。使用 pyosmium 提取长江、黄浦江、吴淞江、富春江—钱塘江、甬江水系与曹娥江，保留原始折线节点。删除全部运河、太浦河、望虞河等人工直渠；没有数据的河段留空，不用直线或样条补齐。来源 URL、原始 PBF SHA256 与 OSM way ID 见 `data/waterways.geojson` 及包内源数据清单。中心线按游戏需要加宽，河宽不是实测河岸。
+
+OSM 署名：© OpenStreetMap contributors，[ODbL 1.0](https://www.openstreetmap.org/copyright)。采用现代自然河流资料。太湖保留为独立湖泊。
 
 植被不是遥感分类结果，而是按高程、低地、固定种子随机斑块及建设预留区制作的设计分布。用于重现“山林—平原—水岸”的总体关系。
 
-温带生态灰度 26、77、128 分别对应 Biome 0 的开阔草地、Biome 1 的草地树群、Biome 2 的深色草地。岸边使用深色草地作视觉过渡，不表示原生湿地分类。所报树群群落比例是蒙版区域比例，不是游戏实际树冠覆盖率。
+温带生态灰度 26 对应 Biome 0 开阔草地。77 对应 Biome 1 草地树群，128 对应 Biome 2 深色草地。岸边使用深色草地作视觉过渡，不表示原生湿地分类。所报树群群落比例是蒙版区域比例，不是游戏实际树冠覆盖率。
 
-## 人口
+## 城镇与人口
 
-- 上海 1953 市区 6,204,417 人、南京 1,091,575 人、杭州 696,608 人：参考[1964 年普查资料中的 1953 比较列](https://zh.wikipedia.org/wiki/中华人民共和国第二次全国人口普查)。此处为二手整理，仅用于设计等级，1953 不能写成 1950 实数。
-- 苏州 1949 市区 502,057 人：参考[苏州市地方志“苏州历史上的人口”](https://dfzb.suzhou.gov.cn/dfzb/szdq/201507/8d3b864be8d247b991dd1524605f7e9b.shtml)。边界与其他城市的普查整理列不完全可比，未据此推算精确城市间人口比例。
-- 南京官方年鉴另有[1950 年非农业人口 101.05 万人](https://tjj.nanjing.gov.cn/material/njnj_2008/renkou/2-5.htm)，作为规模量级交叉参考；没有混作同口径市区人口。
-- 其余城市人口为明确标注的游戏设计估计，CSV 中历史实数留空。
+地图保留 1950 年开局，地形、城镇名称和中心点采用现代资料。城镇定位参考缓存 OSM 的 city、town 节点，节点链接记入布局数据及城市 CSV。张家港、德清、建德、上虞、余杭、浦口改用现今中心位置，另加入安吉。城镇及产业中源于 OSM 的坐标和地物资料按 ODbL 1.0 提供。
 
-所有游戏规模压缩到中间因子 0.20—0.65，预计约 19—64 人；不使用现代地级市全域人口，也不是同比例人口模拟。
+17 座主要城市的人口统一参考[芜湖市统计局发布的 2020 年长三角七普数据](https://tjj.wuhu.gov.cn/tjxx/tjfx/8340308.html)。每 8 万参考人口约对应 1 名游戏居民：上海约 311、苏州约 159、杭州约 149、南京约 116 人。参考值采用全市常住人口，包含下辖县市，仅用于游戏规模换算；其他城镇规模为设计估计。
 
 ## 产业
 
-农业、通海棉作、苏南纺织、宣城浙北林业、域外煤炭输入、马鞍山铁矿、上海制造、太湖与宁波、舟山沿海渔业按区域特色配置。点位可为避水、避免建筑冲突小幅调整；原始定位和调整后位置同时留在 CSV。
+名称及原始位置参考现代企业、厂区、农场和园区，逐点来源记入布局数据及产业 CSV。游戏工厂类型用于表示主营产业，产能和供需按原版货物链配置。最终建筑会在原始点附近选择可建设位置，CSV 同时保留原始经纬度、落地点及偏移量。
 
-不能将这些点解释为 1950 年逐个真实企业的坐标或产能。域外煤炭输入点、原版采矿工厂与标准加工厂用于构成游戏货物链。
+产业中的 29 个陆地点采用 OSM 同名厂区、基地或地物坐标；三个渔场采用真实水域名称。原版黏土矿、砖厂分别表示建材矿物原料、陶瓷及墙材制造；棉花农场和煤矿表示相应原料供应。
 
-[国家发展改革委马鞍山历史介绍](https://cjjjd.ndrc.gov.cn/gongzuodongtai/yanjiangyaowen/anhui/202409/t20240912_1392976.htm)记录钢铁建设始于 1953 年、1956 年建市。本包“马鞍山矿区”城市是小聚落；钢铁点为游戏性提前配置。海上原油点是域外输入的抽象替代。
+海上原油输入平台保留在地图东缘约 500 游戏米处，代表域外输入。原料输入节点使用游戏对应资源工厂表示。
+
+## 中文名字集
+
+新建地图使用 `nameList = "::/names/china/china.names"`，显示语言使用 `zh_CN`。本机游戏的 `names/china/china.names.lua` 按显示语言选择中文或英文名单；两项需同时满足，后续生成的名称才使用中文。
+
+原生城镇产业导入器不读取顶层名字集或语言字段。包内 `manifest.json` 记录必选设置，导入说明要求在新建地图时选择；名字集随游戏保存的地图保留。布局 Lua 不修改这两项设置。
 
 ## 验证范围
 
-离线校验：PNG IHDR 7169 × 7169 / 16 位 / 灰度；Lua 可解析，包含 {{TOWNS}} 城 {{INDUSTRIES}} 产业；坐标在图内，陆地/水上产业位置对应；点位保持间距；初始需求和加工链的必要输入有供应点。最终 PNG 的海域检查限定在海岸数据定义的海面，距岸至少 16 m 的水面上，长江口、上海外海、杭州湾、舟山北/东/南侧及甬江口外海属于同一连通分量；避免内河绕行掩盖海域断开。预览图经过查看。
+离线校验：PNG 为 7169 × 7169、16 位灰度；Lua 包含 {{TOWNS}} 城、{{INDUSTRIES}} 产业。坐标均在图内，陆地与水上产业位置对应，点位保持间距。初始需求和加工链有必要的供应点。
 
-尚未校验：游戏读取与保存、具体初始人数、城区就业/商业规模、树木资产生成、产业扩张占地、道路及船舶寻路、经济可玩性。静态链条完整不代表已完成游戏经济平衡测试。
+海域检查使用最终 PNG，并限定于海岸数据定义的海面。检查在距岸至少 16 m 的水面上进行。长江口、上海外海、杭州湾、舟山周边与甬江口外海属于同一连通分量。
 
+道路使用游戏自带 Main Connections 功能，包内不生成道路。本版按用户要求只制作地图文件，不安装或操作游戏；游戏验收状态为未执行。
 
-## 版本差异
+## 本版变化
 
-v0.2.0 将范围从 560 km 收至 350 km，保留南京—宁波走廊；DEM 从 zoom 10 提升至 zoom 12，工作网格从 3585 提升至 7169。原始高程采样更细，但海岸与湖形仍使用 Natural Earth 概化数据；没有把水系补绘的概化程度冒称为新的测绘精度。地形、航道加宽、生态分布与城市放置均重新计算。
-
-v0.3.0 扩展至 380 km 并顺时针旋转 10°，将舟山（定海）、舟山主岛、朱家尖及邻近海域纳入。保留原有 16 城和 32 个产业，增加定海城市及 W04 舟山近海渔场。全部复用旧版 1806 张 zoom 12 高程瓦片和三份 Natural Earth 文件，仅补下载 1056 张瓦片；派生地形重新生成。
-
-v0.3.1 保持范围、高程编码、水位、城市、产业和生态分布，补充“预览后仍需点击导入”的检查步骤、产业名称恢复命令及生态灰度说明。用户反馈的游戏日志存在生态应用记录，却缺少高度图替换记录；安装的 PNG 与 v0.3.0 发布包 SHA256 一致，约 27.4% 的像素低于 0 m。这支持“高度图未实际应用”的判断，尚未通过游戏导出地形最终确认。当前本地检出缺少原始缓存，按旧清单补齐缺失来源并核对 SHA256；没有删除旧缓存或改用旧派生高程。
+v0.4.0 将高程比例从 10% 提至 35%，PNG 最高编码改为 700 m；使用 OSM 自然河流节点替换简化补绘，删除人工直渠和手绘西湖。城镇和产业按现代资料配置，保留 1950 开局，加入中文名字集设置要求。

@@ -92,6 +92,12 @@ def main():
         hashes[name + ".geojson"] = hashlib.sha256(
             (cache / f"{name}.geojson").read_bytes()
         ).hexdigest()
+    for region in cfg["waterway_regions"]:
+        path = cache / "osm" / f"{region}.osm.pbf"
+        path.parent.mkdir(exist_ok=True)
+        print(f"OSM {region}: {'reuse' if path.exists() else 'download'}", flush=True)
+        fetch(f"https://download.geofabrik.de/asia/china/{region}-latest.osm.pbf", path)
+        hashes[f"osm/{region}.osm.pbf"] = hashlib.sha256(path.read_bytes()).hexdigest()
     manifest = {
         "zoom": zoom,
         "bbox": bbox,
